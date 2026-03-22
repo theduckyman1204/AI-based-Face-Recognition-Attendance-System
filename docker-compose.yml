@@ -1,0 +1,70 @@
+services:
+  api:
+    build: .
+    container_name: face-api
+    env_file:
+      - app/.env
+    environment:
+      # Override DB URL to point to dockerized MySQL
+      MYSQL_URL: mysql+pymysql://faceuser:facepass@mysql:3306/face_recog
+    ports:
+      - "8000:8000"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    volumes:
+      - ./:/app
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  mysql:
+    image: mysql:8.0
+    container_name: face-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: face_recog
+      MYSQL_USER: faceuser
+      MYSQL_PASSWORD: facepass
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-prootpass"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      
+  streamlit:
+    build: .
+    container_name: face-streamlit
+    command: ["streamlit", "run", "streamlit_app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+    environment:
+      API_BASE_URL: http://api:8000
+    depends_on:
+      - api
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./:/app
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: face-phpmyadmin
+    restart: unless-stopped
+    environment:
+      PMA_HOST: mysql
+      PMA_USER: faceuser
+      PMA_PASSWORD: facepass
+    ports:
+      - "8080:80"
+    depends_on:
+      - mysql
+
+volumes:
+  mysql_data:
+    driver: local
